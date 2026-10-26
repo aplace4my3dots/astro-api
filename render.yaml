@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: astro-engine-api
+    env: python
+    region: frankfurt # بهترین پینگ برای اتصال به سیستم‌های دیگر
+    plan: free # استفاده از پلن رایگان
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn app:app" # دستور اجرای سرور در لینوکس
