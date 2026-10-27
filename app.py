@@ -1,8 +1,8 @@
 from flask import Flask, request, jsonify
 import swisseph as swe
-from geopy.geocoders import Nominatim
 from datetime import datetime
 import os
+import requests
 
 app = Flask(__name__)
 
@@ -16,9 +16,23 @@ def get_zodiac_sign(degree):
     index = int(degree / 30)
     return zodiac_signs[index]
 
+def get_coordinates(city_name):
+    # استفاده از API فوق‌سریع و بدون محدودیت برای پیدا کردن شهر
+    try:
+        url = f"https://geocoding-api.open-meteo.com/v1/search?name={city_name}&count=1&language=en&format=json"
+        response = requests.get(url, timeout=5)
+        data = response.json()
+        if "results" in data and len(data["results"]) > 0:
+            lat = data["results"][0]["latitude"]
+            lon = data["results"][0]["longitude"]
+            return lat, lon
+    except:
+        pass
+    return None, None
+
 @app.route('/', methods=['GET'])
 def home():
-    return "موتور محاسبات آسترولوژی فعال است. لطفاً داده‌ها را به /calculate ارسال کنید."
+    return "موتور محاسبات آسترولوژی فعال است. نسخه 2.0 (نقشه‌یاب سریع)"
 
 @app.route('/calculate', methods=['POST'])
 def calculate_chart():
@@ -31,17 +45,13 @@ def calculate_chart():
         if not city or not date_str or not time_str:
             return jsonify({"error": "لطفاً شهر، تاریخ و ساعت را ارسال کنید."}), 400
 
-        # ۱. تبدیل نام شهر به مختصات جغرافیایی
-        geolocator = Nominatim(user_agent="astro_engine_prod")
-        location = geolocator.geocode(city)
-        if not location:
-            return jsonify({"error": f"مختصات شهر {city} پیدا نشد."}), 404
+        # ۱. تبدیل نام شهر به مختصات جغرافیایی (سیستم جدید)
+        lat, lon = get_coordinates(city)
+        if lat is None:
+            return jsonify({"error": f"مختصات شهر '{city}' پیدا نشد. لطفاً املای انگلیسی شهر را بررسی کنید (مثال: Tehran)."}), 404
             
-        lat, lon = location.latitude, location.longitude
-        
-        # ۲. محاسبه زمان جولیان (Julian Day) برای Swiss Ephemeris
+        # ۲. محاسبه زمان جولیان (Julian Day)
         dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
-        # اضافه کردن فرمول دقیق تبدیل زمان (بدون در نظر گرفتن پیچیدگی‌های Timezone در این نسخه ساده)
         jd = swe.julday(dt.year, dt.month, dt.day, dt.hour + (dt.minute/60.0))
         
         # ۳. محاسبه مختصات سیارات
@@ -69,6 +79,5 @@ def calculate_chart():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    # پورت برای سرورهای ابری روی 10000 یا 8080 تنظیم می‌شود
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
